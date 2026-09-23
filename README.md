@@ -22,7 +22,7 @@ The CLI does not publish, commit, push, open pull requests, edit Jev AI Radar, o
 
 On September 23, 2026, Jev AI Dev ran this tool against 15 items from its live Projects, System One, and User Cases collections. Across the 10 Project and User Case items with scenario baselines, Jev's primary category matched one of the existing human labels in 10 of 10 cases. The sample is small and does not establish general accuracy. See [the validation note](docs/validation.md) for the method, findings, and limitations.
 
-The repository includes a maintainer adapter for a local checkout of the jevai.dev source. Other users can provide the same optional `metadata.humanBaseline.scenarios` field in their own candidate JSON and run the generic `evaluate` command.
+The repository includes a maintainer adapter for a local checkout of the jevai.dev source. It parses the expected JSON and JSON-like TypeScript data declarations without importing or executing the source files. Other users can provide the same optional `metadata.humanBaseline.scenarios` field in their own candidate JSON and run the generic `evaluate` command.
 
 ```bash
 npm run cli -- import-jevai-dev \
@@ -49,11 +49,16 @@ Requires Node.js 20 or newer.
 ```bash
 npm install
 cp .env.example .env
+chmod 600 .env
 ```
 
 The default local configuration uses the same OpenRouter route as jevai.dev: `OPENROUTER_API_KEY` with model `typesafe/jev-1.13`. Set `JEV_PROVIDER=typesafe` and `TYPESAFE_API_KEY` only when using TypeSafe's direct API. `GITHUB_TOKEN` is optional but raises GitHub API rate limits. The tool never writes any key to its output.
 
 The CLI loads a local `.env` automatically. That file is excluded by `.gitignore`.
+
+### Data sent to the model provider
+
+The `classify` command sends each candidate's source metadata, summary, supplied content, and GitHub evidence to the configured OpenRouter or TypeSafe API. Human baseline labels under `metadata` are not sent. Only classify public material or content you are authorized to share with that provider, and review the provider's privacy and retention settings before processing sensitive data.
 
 ## Workflow
 

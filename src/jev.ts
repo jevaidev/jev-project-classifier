@@ -62,8 +62,8 @@ export const createOpenRouterRunner = (options: OpenRouterRunnerOptions = {}): D
       signal: AbortSignal.timeout(30_000)
     });
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 500);
-      throw new Error(`OpenRouter decision failed (${response.status}): ${detail}`);
+      await response.body?.cancel();
+      throw new Error(`OpenRouter decision failed with HTTP ${response.status}.`);
     }
     const parsed: unknown = await response.json();
     if (!isRecord(parsed) || !isRecord(parsed.answers)) {
@@ -92,27 +92,56 @@ export const createConfiguredRunner = (): DecisionRunner => {
   return createTypeSafeRunner();
 };
 
-const normalizeAnswers = (result: SystemOneResult<Questions>): Record<string, NormalizedAnswer> => {
+const finiteNumber = (value: unknown, field: string): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Jev returned an invalid ${field}.`);
+  }
+  return value;
+};
+
+const probability = (value: unknown, field: string): number => {
+  const normalized = finiteNumber(value, field);
+  if (normalized < 0 || normalized > 1) throw new Error(`Jev returned an out-of-range ${field}.`);
+  return normalized;
+};
+
+const probabilityRecord = (value: unknown, field: string): Record<string, number> => {
+  if (!isRecord(value)) throw new Error(`Jev returned invalid ${field} probabilities.`);
+  return Object.fromEntries(Object.entries(value).map(([key, rawProbability]) => {
+    const normalized = probability(rawProbability, `${field} probability`);
+    return [key, normalized];
+  }));
+};
+
+const normalizeAnswers = (
+  result: SystemOneResult<Questions>,
+  expectedQuestions: ReadonlySet<string>
+): Record<string, NormalizedAnswer> => {
   const normalized: Record<string, NormalizedAnswer> = {};
   for (const [name, answer] of Object.entries(result.answers)) {
+    if (!expectedQuestions.has(name) || !isRecord(answer) || typeof answer.type !== 'string') {
+      throw new Error(`Jev returned an unexpected answer for “${name}”.`);
+    }
     if (answer.type === 'noul') {
-      normalized[name] = {type: 'noul', probabilityYes: answer.noul};
+      const probabilityYes = probability(answer.noul, `${name} probability`);
+      normalized[name] = {type: 'noul', probabilityYes};
     } else if (answer.type === 'choice') {
+      if (typeof answer.choice !== 'string') throw new Error(`Jev returned an invalid ${name} choice.`);
       normalized[name] = {
         type: 'choice',
         choice: answer.choice,
-        confidence: answer.confidence,
-        probabilities: {...answer.probabilities}
+        confidence: probability(answer.confidence, `${name} confidence`),
+        probabilities: probabilityRecord(answer.probabilities, name)
       };
-    } else {
+    } else if (answer.type === 'score') {
       normalized[name] = {
         type: 'score',
-        score: answer.score,
-        confidence: answer.confidence,
-        probabilities: Object.fromEntries(
-          Object.entries(answer.probabilities).map(([key, value]) => [key, Number(value)])
-        )
+        score: finiteNumber(answer.score, `${name} score`),
+        confidence: probability(answer.confidence, `${name} confidence`),
+        probabilities: probabilityRecord(answer.probabilities, name)
       };
+    } else {
+      throw new Error(`Jev returned an unsupported answer type for “${name}”.`);
     }
   }
   return normalized;
@@ -200,7 +229,7 @@ export const classifyCandidate = async (
     questions: rubric.questions,
     ...(options.model ? {model: options.model} : {})
   });
-  const answers = normalizeAnswers(result);
+  const answers = normalizeAnswers(result, new Set(Object.keys(rubric.questions)));
   const tagThreshold = options.tagThreshold ?? DEFAULT_TAG_THRESHOLD;
   const reviewFlagThreshold = options.reviewFlagThreshold ?? DEFAULT_REVIEW_FLAG_THRESHOLD;
   const relationshipRejectThreshold = options.relationshipRejectThreshold ?? DEFAULT_RELATIONSHIP_REJECT_THRESHOLD;

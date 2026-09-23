@@ -29,3 +29,16 @@ test('OpenRouter runner uses the Jev decisions endpoint and typed request shape'
   assert.equal(result.answers.relevant.type, 'noul');
   assert.equal(result.usage.input_tokens, 12);
 });
+
+test('OpenRouter errors do not echo provider response bodies', async () => {
+  const runner = createOpenRouterRunner({
+    apiKey: 'test-key',
+    fetchImpl: async () => new Response('private candidate content', {status: 400})
+  });
+  await assert.rejects(
+    runner({state: {summary: 'private'}, questions: {relevant: noul('Is it relevant?')}}),
+    error => error instanceof Error
+      && error.message === 'OpenRouter decision failed with HTTP 400.'
+      && !error.message.includes('private candidate content')
+  );
+});

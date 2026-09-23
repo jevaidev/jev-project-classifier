@@ -42,12 +42,29 @@ export const rederiveClassificationFile = (
   }))
 });
 
-const tableText = (value: string): string => value
+const markdownText = (value: string): string => value
   .replaceAll('\\', '\\\\')
+  .replaceAll('\r', ' ')
+  .replaceAll('\n', ' ')
+  .replaceAll('&', '&amp;')
+  .replaceAll('`', '\\`')
+  .replaceAll('*', '\\*')
+  .replaceAll('_', '\\_')
   .replaceAll('|', '\\|')
   .replaceAll('[', '\\[')
   .replaceAll(']', '\\]')
-  .replaceAll('\n', ' ');
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;');
+
+const safeHttpUrl = (value: string): string | null => {
+  try {
+    const url = new URL(value);
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+};
 
 export const renderReviewMarkdown = (file: ClassificationFile): string => {
   const rows = file.classifications.map(item => {
@@ -57,18 +74,25 @@ export const renderReviewMarkdown = (file: ClassificationFile): string => {
     const secondary = item.secondaryTagCandidates
       .map(candidate => `${candidate.tag} (${candidate.probability.toFixed(2)})`)
       .join(', ');
-    return `| [${tableText(item.candidate.title)}](<${item.candidate.sourceUrl.replaceAll('>', '%3E')}>) | ${stars} | ${item.starRank ?? '—'} | ${relationText} | ${item.primaryTag ?? '—'} | ${secondary || '—'} | ${item.reviewFlags.join(', ') || '—'} | ${item.recommendation} |`;
+    const sourceUrl = safeHttpUrl(item.candidate.sourceUrl);
+    const title = markdownText(item.candidate.title);
+    const candidateCell = sourceUrl ? `[${title}](<${sourceUrl}>)` : `${title} (invalid source URL)`;
+    return `| ${candidateCell} | ${stars} | ${item.starRank ?? '—'} | ${markdownText(relationText)} | ${markdownText(item.primaryTag ?? '—')} | ${markdownText(secondary || '—')} | ${markdownText(item.reviewFlags.join(', ') || '—')} | ${markdownText(item.recommendation)} |`;
   });
-  const checks = file.classifications.map(item => [
-    `### ${item.candidate.title}`,
-    '',
-    `- [ ] Verify the source and relationship classification.`,
-    `- [ ] Check licensing, identity, and material claims when flagged.`,
-    `- [ ] Accept or edit primary tag: ${item.primaryTag ?? 'none'}.`,
-    `- [ ] Review secondary tag candidates: ${item.secondaryTagCandidates.map(candidate => `${candidate.tag} (${candidate.probability.toFixed(2)})`).join(', ') || 'none'}.`,
-    `- Source: ${item.candidate.sourceUrl}`,
-    ''
-  ].join('\n'));
+  const checks = file.classifications.map(item => {
+    const sourceUrl = safeHttpUrl(item.candidate.sourceUrl);
+    const source = sourceUrl ? `[${markdownText(sourceUrl)}](<${sourceUrl}>)` : 'Invalid source URL — verify manually.';
+    return [
+      `### ${markdownText(item.candidate.title)}`,
+      '',
+      `- [ ] Verify the source and relationship classification.`,
+      `- [ ] Check licensing, identity, and material claims when flagged.`,
+      `- [ ] Accept or edit primary tag: ${markdownText(item.primaryTag ?? 'none')}.`,
+      `- [ ] Review secondary tag candidates: ${markdownText(item.secondaryTagCandidates.map(candidate => `${candidate.tag} (${candidate.probability.toFixed(2)})`).join(', ') || 'none')}.`,
+      `- Source: ${source}`,
+      ''
+    ].join('\n');
+  });
   return [
     '# Jev classification review queue',
     '',
