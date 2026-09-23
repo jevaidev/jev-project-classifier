@@ -43,5 +43,7 @@ Star ranking can be reproduced without a model and should not drift because of m
 - API keys come from environment variables and are never written to output.
 - Source URLs and collection timestamps remain attached to every candidate.
 - README content is truncated before it is sent for classification.
+- The site adapter parses only JSON-like literal data and never imports the site's TypeScript modules.
+- Candidate evidence leaves the machine when sent to the configured model provider; callers must only submit authorized content.
 - Model output is treated as untrusted editorial input.
 - All generated decisions use `pending_human_review`.
