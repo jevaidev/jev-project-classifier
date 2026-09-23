@@ -45,8 +45,8 @@ export const assertRepositorySlug = (repository: string): string => {
 const githubJson = async <T>(url: string, fetchImpl: FetchLike): Promise<T> => {
   const response = await fetchImpl(url, {headers: githubHeaders()});
   if (!response.ok) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error(`GitHub API request failed (${response.status}) for ${url}: ${detail}`);
+    await response.body?.cancel();
+    throw new Error(`GitHub API request failed with HTTP ${response.status} for ${url}.`);
   }
   return response.json() as Promise<T>;
 };

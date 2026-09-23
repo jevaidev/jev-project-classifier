@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {pathToFileURL} from 'node:url';
 import {collectRepositories, type GithubCollectorOptions} from '../github.js';
+import {readLiteralArray} from '../literal-data.js';
 import type {Candidate, Profile} from '../types.js';
 
 type ProjectCatalogEntry = {
@@ -64,13 +64,70 @@ const selectDiverse = <T>(items: T[], limit: number | undefined, labels: (item: 
   return selected;
 };
 
-const importModule = async <T>(path: string): Promise<T> => (
-  import(pathToFileURL(path).href) as Promise<T>
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const stringArray = (value: unknown, field: string): string[] => {
+  if (!Array.isArray(value) || !value.every(item => typeof item === 'string')) {
+    throw new Error(`${field} must be an array of strings.`);
+  }
+  return value;
+};
+
+const projectEntry = (value: unknown): ProjectCatalogEntry => {
+  if (!isRecord(value)
+    || typeof value.repo !== 'string'
+    || typeof value.name !== 'string'
+    || typeof value.kind !== 'string'
+    || typeof value.summary !== 'string'
+    || typeof value.ranked !== 'boolean') {
+    throw new Error('Invalid project catalog entry in jevai.dev source data.');
+  }
+  return {...value, scenarios: stringArray(value.scenarios, 'Project scenarios')} as ProjectCatalogEntry;
+};
+
+const systemOneEntry = (value: unknown): SystemOneEntry => {
+  if (!isRecord(value)
+    || typeof value.name !== 'string'
+    || typeof value.repo !== 'string'
+    || typeof value.base !== 'string'
+    || typeof value.kind !== 'string'
+    || typeof value.featured !== 'boolean') {
+    throw new Error('Invalid System One entry in jevai.dev source data.');
+  }
+  return value as unknown as SystemOneEntry;
+};
+
+const userCaseEntry = (value: unknown): UserCaseEntry => {
+  if (!isRecord(value)
+    || typeof value.id !== 'string'
+    || typeof value.title !== 'string'
+    || typeof value.summary !== 'string'
+    || typeof value.decision !== 'string'
+    || typeof value.takeaway !== 'string'
+    || typeof value.maturity !== 'string'
+    || typeof value.author !== 'string'
+    || typeof value.published !== 'string'
+    || typeof value.checked !== 'string'
+    || !isRecord(value.source)
+    || (value.source.platform !== 'x' && value.source.platform !== 'youtube')
+    || typeof value.source.url !== 'string') {
+    throw new Error('Invalid User Case entry in jevai.dev source data.');
+  }
+  return {
+    ...value,
+    patterns: stringArray(value.patterns, 'User Case patterns'),
+    scenarios: stringArray(value.scenarios, 'User Case scenarios'),
+    source: {platform: value.source.platform, url: value.source.url}
+  } as UserCaseEntry;
+};
 
 const loadProjectCandidates = async (siteRoot: string, options: JevAiDevImportOptions): Promise<Candidate[]> => {
   const raw = await readFile(join(siteRoot, 'src/data/project-catalog.json'), 'utf8');
-  const catalog = (JSON.parse(raw) as ProjectCatalogEntry[]).filter(item => item.ranked);
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error('jevai.dev project catalog must be an array.');
+  const catalog = parsed.map(projectEntry).filter(item => item.ranked);
   const selected = selectDiverse(catalog, assertLimit(options.limit), item => item.scenarios);
   const candidates = await collectRepositories(selected.map(item => item.repo), options);
   return candidates.map((candidate, index) => ({
@@ -88,10 +145,8 @@ const loadProjectCandidates = async (siteRoot: string, options: JevAiDevImportOp
 };
 
 const loadSystemOneCandidates = async (siteRoot: string, options: JevAiDevImportOptions): Promise<Candidate[]> => {
-  const module = await importModule<{systemOneProjects: readonly SystemOneEntry[]}>(
-    join(siteRoot, 'src/data/system-one-projects.ts')
-  );
-  const entries = [...module.systemOneProjects];
+  const filePath = join(siteRoot, 'src/data/system-one-projects.ts');
+  const entries = (await readLiteralArray(filePath, 'systemOneProjects')).map(systemOneEntry);
   const selected = selectDiverse(entries, assertLimit(options.limit), item => [item.kind]);
   const candidates = await collectRepositories(selected.map(item => item.repo), options);
   return candidates.map((candidate, index) => ({
@@ -109,10 +164,9 @@ const loadSystemOneCandidates = async (siteRoot: string, options: JevAiDevImport
 };
 
 const loadUseCaseCandidates = async (siteRoot: string, options: JevAiDevImportOptions): Promise<Candidate[]> => {
-  const module = await importModule<{userCases: UserCaseEntry[]}>(
-    join(siteRoot, 'src/data/user-cases.ts')
-  );
-  const selected = selectDiverse(module.userCases, assertLimit(options.limit), item => item.scenarios);
+  const filePath = join(siteRoot, 'src/data/user-cases.ts');
+  const entries = (await readLiteralArray(filePath, 'userCaseCollection')).map(userCaseEntry);
+  const selected = selectDiverse(entries, assertLimit(options.limit), item => item.scenarios);
   const collectedAt = (options.now ?? (() => new Date()))().toISOString();
   return selected.map(item => ({
     id: `jevai-use-case:${item.id}`,

@@ -78,6 +78,24 @@ test('only sends a confident unrelated result to the likely-unrelated queue', as
   assert.equal(classification.reviewStatus, 'pending_human_review');
 });
 
+test('rejects unexpected or malformed model answers', async () => {
+  const unexpectedRunner: DecisionRunner = async () => result({
+    __proto_pollution: {type: 'noul', noul: 1}
+  });
+  await assert.rejects(
+    classifyCandidate(candidate('community/tool', 12), 'project', unexpectedRunner),
+    /unexpected answer/
+  );
+
+  const malformedRunner: DecisionRunner = async () => result({
+    relationship: {type: 'noul', noul: 2}
+  });
+  await assert.rejects(
+    classifyCandidate(candidate('community/tool', 12), 'project', malformedRunner),
+    /out-of-range/
+  );
+});
+
 test('renders a human review checklist rather than publication output', async () => {
   const runner: DecisionRunner = async () => result({
     relationship: {type: 'choice', choice: 'uses_jev', confidence: 0.9, probabilities: {uses_jev: 0.9}},
@@ -88,4 +106,20 @@ test('renders a human review checklist rather than publication output', async ()
   assert.match(markdown, /Human review checklist/);
   assert.match(markdown, /\[ \] Verify the source/);
   assert.match(markdown, /pending human review/i);
+});
+
+test('renders untrusted titles and URLs without Markdown injection', async () => {
+  const malicious = {
+    ...candidate('community/tool', 12),
+    title: 'Project\n## Injected heading | [link]',
+    sourceUrl: 'javascript:alert(1)'
+  };
+  const runner: DecisionRunner = async () => result({
+    relationship: {type: 'choice', choice: 'uses_jev', confidence: 0.9, probabilities: {uses_jev: 0.9}},
+    evidence_quality: {type: 'score', score: 3, confidence: 0.9, legend: {}, probabilities: {'3': 1}}
+  });
+  const markdown = renderReviewMarkdown(await classifyCandidates([malicious], 'project', runner));
+  assert.doesNotMatch(markdown, /\n## Injected heading/);
+  assert.doesNotMatch(markdown, /\]\(javascript:/);
+  assert.match(markdown, /invalid source URL/i);
 });
