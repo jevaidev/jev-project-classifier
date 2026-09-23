@@ -1,0 +1,42 @@
+{
+  "name": "jev-project-classifier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Jev-powered, human-reviewed classifier for GitHub projects, System One ecosystem work, and real-world use cases.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jevaidev/jev-project-classifier.git"
+  },
+  "homepage": "https://github.com/jevaidev/jev-project-classifier#readme",
+  "bugs": {
+    "url": "https://github.com/jevaidev/jev-project-classifier/issues"
+  },
+  "keywords": [
+    "jev",
+    "system-one",
+    "typesafe-ai",
+    "openrouter",
+    "classification",
+    "github",
+    "developer-tools"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "cli": "node --import tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.0"
+  }
+}

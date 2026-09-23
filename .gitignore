@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+dist/
+data/*.json
+data/*.md
+!data/.gitkeep
+*.log

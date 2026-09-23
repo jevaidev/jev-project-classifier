@@ -1,0 +1,11 @@
+[
+  {
+    "id": "manual:support-escalation-demo",
+    "sourceType": "manual",
+    "title": "Support escalation demo",
+    "sourceUrl": "https://example.com/support-escalation-demo",
+    "summary": "A demonstration in which Jev classifies the issue and decides whether a human should review it.",
+    "content": "Replace this example with the source post, transcript, or editorial notes. Preserve the original source URL for human verification.",
+    "collectedAt": "2026-09-23T00:00:00Z"
+  }
+]
